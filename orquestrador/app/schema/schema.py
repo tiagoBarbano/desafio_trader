@@ -44,9 +44,8 @@ class Order(JsonModel):
     idConta: int
     
     class Meta:
-        database = redis
-
-Migrator().run()        
+        database = redis        
         
 async def save_event(evento: Orquestrador):
+    await Migrator().run()
     await evento.save()

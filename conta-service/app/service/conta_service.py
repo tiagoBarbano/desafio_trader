@@ -16,7 +16,6 @@ class Conta(JsonModel):
 
     class Meta:
         database = redis
-        
 
 @router.get("/contas")
 async def get_contas():
@@ -28,7 +27,8 @@ async def get_conta_by_id(id: int):
     await Migrator().run()
     try:
         conta = await Conta.find(Conta.idConta == id).first()
-        return conta.saldoConta
+        return { "SaldoConta": conta.saldoConta, 
+                  "ValorAtivos": conta.valorAtivos } 
     except Exception as ex:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ex))
 

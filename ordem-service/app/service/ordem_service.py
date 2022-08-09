@@ -72,18 +72,35 @@ async def on_message(message: AbstractIncomingMessage) -> None:
         async with aiohttp.ClientSession(trace_configs=[create_trace_config()]) as session:
             async with session.get("http://localhost:8003/", params=params, ssl=False) as response:
                 resposta = await response.json()
-
-        orderPendents = await Order.find(Order.idConta == newOrder.idConta,
-                                        Order.tipoTransacao == newOrder.tipoTransacao,
-                                        Order.statusOrdem == Status.PENDENTE).all()
+      
+        saldoComprometido = 0
         
         if newOrder.tipoTransacao == Transacao.COMPRA:
+            orderPendents = await Order.find(Order.idConta == newOrder.idConta,
+                                        Order.tipoTransacao == Transacao.VENDA,
+                                        Order.statusOrdem == Status.PENDENTE).all()
             print("Regras de Compra")
+            for ordersPendent in orderPendents:
+                saldoComprometido = ordersPendent.valorOrdem + saldoComprometido
+            
+            saldoReal = resposta.get("SaldoConta") - (saldoComprometido + newOrder.valorOrdem)
+            
+            if saldoReal < 0:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ex))    
             
         if newOrder.tipoTransacao == Transacao.VENDA:            
+            orderPendents = await Order.find(Order.idConta == newOrder.idConta,
+                                        Order.tipoTransacao == Transacao.COMPRA,
+                                        Order.statusOrdem == Status.PENDENTE).all()
             print("Regras de Venda")
-        
-                
+            for ordersPendent in orderPendents:
+                saldoComprometido = ordersPendent.valorOrdem + saldoComprometido
+            
+            saldoReal = resposta.get("ValorAtivos") - (saldoComprometido - newOrder.valorOrdem)
+            
+            if saldoReal > 0:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ex))  
+
         try: 
             await newOrder.save()
         except Exception as ex:

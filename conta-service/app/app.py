@@ -29,14 +29,14 @@ def create_app():
     trace.set_tracer_provider(tracer)
     
     tracer.add_span_processor(BatchSpanProcessor(JaegerExporter(agent_host_name="localhost",agent_port=6831,)))
-    
+        
     def server_request_hook(span: Span, scope: dict):
         if span and span.is_recording():
-            span.set_attribute("custom_user_attribute_from_request_hook", "some-value")
+            span.set_attribute("request", str(scope))
 
     def client_request_hook(span: Span, scope: dict):
         if span and span.is_recording():
-            span.set_attribute("custom_user_attribute_from_client_request_hook", "some-value")
+            span.set_attribute("request", str(scope))
 
     def client_response_hook(span: Span, message: dict):
         if span and span.is_recording():

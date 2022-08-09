@@ -31,19 +31,10 @@ async def create(request: InitOrder, background_tasks: BackgroundTasks):
         routing_key = "queue.new_order"
         exchange = "desafio"
     
-        # Explicit type annotation
         connection: RobustConnection = await connect_robust("amqp://guest:guest@127.0.0.1/")
-
-        # Creating channel
         channel = await connection.channel()
-
-        # Declaring exchange
         exchange = await channel.declare_exchange(exchange, ExchangeType.TOPIC,  )
-
-        # Declaring queue
         queue = await channel.declare_queue(queue_name, durable=True)
-
-        # Binding queue
         await queue.bind(exchange, routing_key)
 
         await exchange.publish(
