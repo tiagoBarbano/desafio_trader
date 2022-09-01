@@ -1,7 +1,9 @@
 import enum
 from aredis_om import get_redis_connection, JsonModel, Migrator
 from datetime import datetime
+from fastapi import APIRouter
 
+router = APIRouter()
 
 redis = get_redis_connection(host="localhost", port=6379, decode_responses=True)
 
@@ -49,3 +51,7 @@ class Order(JsonModel):
 async def save_event(evento: Orquestrador):
     await Migrator().run()
     await evento.save()
+
+@router.get("/")    
+async def get_event(uuid: str):
+    return await Orquestrador.find(Orquestrador.uuid == uuid).all()

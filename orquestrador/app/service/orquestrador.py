@@ -12,4 +12,3 @@ async def step1():
     task2 = asyncio.create_task(createdOrderQueue())
     
     await asyncio.gather(task1,task2)
-

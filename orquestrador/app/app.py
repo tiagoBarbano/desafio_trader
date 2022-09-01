@@ -1,6 +1,7 @@
 from typing import Any
 from fastapi import FastAPI
 from app.service import orquestrador
+from app.schema import schema
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -13,7 +14,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 def create_app():
     app: Any = FastAPI(
-            title="Ordem SERVICE",
+            title="Orquestrador SERVICE",
             description="",
             version="1.0.0",
             openapi_url="/openapi.json",
@@ -33,6 +34,7 @@ def create_app():
     async def start_create():
         await orquestrador.init_Orquestrador()
         
+    app.include_router(schema.router)
     app.add_event_handler("startup",start_create)
 
     return app

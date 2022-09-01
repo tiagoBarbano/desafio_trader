@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException
 from aredis_om import get_redis_connection, JsonModel, Field, Migrator
+from redis_om import NotFoundError
 
 
 router = APIRouter()
@@ -29,8 +30,8 @@ async def get_conta_by_id(id: int):
         conta = await Conta.find(Conta.idConta == id).first()
         return { "SaldoConta": conta.saldoConta, 
                   "ValorAtivos": conta.valorAtivos } 
-    except Exception as ex:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ex))
+    except NotFoundError as ex:
+        return "Bad request", 400 
 
 @router.get("/pk/{pk}")
 async def get_conta_by_pk(pk: str):
@@ -41,3 +42,30 @@ async def get_conta_by_pk(pk: str):
 async def create(request: Conta):
     await request.save()
     return  request
+
+@router.post('/credita-conta')
+async def creditaConta(idConta: int, qtdAtivos: int, valorAtivos: float, nomeAtivo: str):
+    conta = await Conta.find(Conta.idConta == idConta).first()
+    conta.qtdAtivos = conta.qtdAtivos + qtdAtivos
+    conta.nomeAtivo = nomeAtivo
+    conta.valorAtivos = conta.valorAtivos + valorAtivos
+    conta.saldoConta = conta.saldoConta - valorAtivos
+    conta.precoMedio = conta.valorAtivos / conta.qtdAtivos
+    
+    await conta.save()
+    
+    return  { "message": "Conta Atualizada" }   
+
+
+@router.post('/debita-conta')
+async def debitaConta(idConta: int, qtdAtivos: int, valorAtivos: float, nomeAtivo: str):
+    conta = await Conta.find(Conta.idConta == idConta).first()
+    conta.qtdAtivos = conta.qtdAtivos - qtdAtivos
+    conta.nomeAtivo = nomeAtivo
+    conta.valorAtivos = conta.valorAtivos - valorAtivos
+    conta.saldoConta = conta.saldoConta + valorAtivos
+    conta.precoMedio = conta.valorAtivos / conta.qtdAtivos
+    
+    await conta.save()
+    
+    return  { "message": "Conta Atualizada" }

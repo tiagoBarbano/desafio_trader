@@ -10,7 +10,7 @@ async def createdOrderQueue():
     connection = await connect_robust("amqp://guest:guest@127.0.0.1/")    
     async with connection:
         channel = await connection.channel()
-        await channel.set_qos(prefetch_count=10)
+        await channel.set_qos(prefetch_count=200)
         queue = await channel.declare_queue("queue.created_order", durable=True)
         await queue.consume(on_createdOrderQueue)
 
