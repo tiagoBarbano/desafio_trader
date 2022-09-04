@@ -1,28 +1,38 @@
 import asyncio, json
 from fastapi import HTTPException, status
 from aredis_om import Migrator
-from aio_pika import connect_robust
-from aio_pika.abc import AbstractIncomingMessage
+from aio_pika import connect_robust, IncomingMessage, ExchangeType
 from datetime import datetime
 from app.schema.order_schema import Order, Ativo, Status, Transacao
 from app.service.utils import post_message, post_message_dlq
 from app.service.contaProxy import contaProxy
+from app.config import RABBIT_MQ
+from fastapi import FastAPI
 
 
-async def createOrder():
+async def createOrder(app: FastAPI):
     await Migrator().run()
-    connection = await connect_robust("amqp://guest:guest@127.0.0.1/")
+    connection = await connect_robust(RABBIT_MQ)
+    app.state.rabbit_connection_to_create_order = connection
 
-    async with connection:
-        channel = await connection.channel()
-        await channel.set_qos(prefetch_count=200)
-        queue = await channel.declare_queue("queue.to_create_order", durable=True)
-        await queue.consume(on_message)
+    # Creating a channel
+    channel = await connection.channel()
+    await channel.set_qos(prefetch_count=200)
+    app.state.rabbit_channel_to_create_order = channel
 
-        print(" [*] Waiting for messages to createOrder. To exit press CTRL+C")
-        await asyncio.Future()
-            
-async def on_message(message: AbstractIncomingMessage) -> None:
+    exchange = await channel.declare_exchange("desafio", ExchangeType.TOPIC)
+    app.state.rabbit_exchange = exchange
+
+    queue = await channel.declare_queue("queue.to_create_order", durable=True)
+    app.state.rabbit_queue_to_create_order = queue
+
+    # Binding the queue to the exchange
+    await queue.bind(exchange, routing_key='queue.to_create_order')
+
+async def consumeCreateOrder(app: FastAPI):
+    await app.state.rabbit_queue_to_create_order.consume(on_message)    
+ 
+async def on_message(message: IncomingMessage) -> None:
     try:
         async with message.process():
             json_request = json.loads(message.body.decode())
@@ -44,9 +54,9 @@ async def on_message(message: AbstractIncomingMessage) -> None:
             
             match newOrder.tipoTransacao:
                 case Transacao.COMPRA:
-                    validaSaldoCompra(resposta, newOrder)
+                    await validaSaldoCompra(resposta, newOrder)
                 case Transacao.VENDA:            
-                    validaSaldoVenda(resposta, newOrder)
+                    await validaSaldoVenda(resposta, newOrder)
 
             try: 
                 await newOrder.save()
@@ -70,13 +80,15 @@ async def validaSaldoCompra(resposta, newOrder):
         orderPendings = await Order.find(Order.idConta == newOrder.idConta,
                                 Order.tipoTransacao == Transacao.COMPRA,
                                 Order.statusOrdem == Status.PENDENTE).all()
-
+        
+        saldoComprometido = 0
+        
         for ordersPending in orderPendings:
             saldoComprometido = ordersPending.valorOrdem + saldoComprometido
         
         saldoReal = resposta.get("SaldoConta") - (saldoComprometido + newOrder.valorOrdem)
         
-        if saldoReal > 0:
+        if saldoReal < 0:
             await post_message(newOrder,
                             "Saldo Insuficiente para Compra",
                             "queue.recused_order", 
@@ -91,7 +103,9 @@ async def validaSaldoVenda(resposta, newOrder):
         orderPendings = await Order.find(Order.idConta == newOrder.idConta,
                                     Order.tipoTransacao == Transacao.VENDA,
                                     Order.statusOrdem == Status.PENDENTE).all()
-
+        
+        saldoComprometido = 0
+        
         for ordersPending in orderPendings:
             saldoComprometido = ordersPending.valorOrdem + saldoComprometido
         

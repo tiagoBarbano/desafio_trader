@@ -1,17 +1,19 @@
 from fastapi import HTTPException, status
-from aio_pika import connect_robust, RobustConnection, ExchangeType, Message
+from aio_pika import connect_robust, RobustConnection, ExchangeType, Message, IncomingMessage, ExchangeType
 import asyncio, json
 from datetime import datetime
 from aio_pika import connect_robust
-from aio_pika.abc import AbstractIncomingMessage
 from app.schema.schema import Orquestrador, Evento, Status, save_event
+from app.config import RABBIT_MQ
+from fastapi import FastAPI
+
 
 
 async def post_message(msg, queue_name: str, routing_key: str):
     try:
         exchange = "desafio"
     
-        connection: RobustConnection = await connect_robust("amqp://guest:guest@127.0.0.1/")
+        connection: RobustConnection = await connect_robust(RABBIT_MQ)
         channel = await connection.channel()
         exchange = await channel.declare_exchange(exchange, ExchangeType.TOPIC,  )
         queue = await channel.declare_queue(queue_name, durable=True)
@@ -25,23 +27,28 @@ async def post_message(msg, queue_name: str, routing_key: str):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ex))
     
 
-async def consumerDQLQueue():
-    connection = await connect_robust("amqp://guest:guest@127.0.0.1/")    
-    async with connection:
-        # Creating a channel
-        channel = await connection.channel()
-        await channel.set_qos(prefetch_count=1)
+async def consumerDQLQueue(app: FastAPI):
+    connection = await connect_robust(RABBIT_MQ)
+    app.state.rabbit_connection_dlq = connection
 
-        # Declaring queue
-        queue = await channel.declare_queue("queue.dlq", durable=True)
+    # Creating a channel
+    channel = await connection.channel()
+    await channel.set_qos(prefetch_count=200)
+    app.state.rabbit_channel_dlq = channel
 
-        # Start listening the queue with name 'task_queue'
-        await queue.consume(on_consumerDQLQueue)
+    exchange = await channel.declare_exchange("desafio", ExchangeType.TOPIC)
+    app.state.rabbit_exchange = exchange
 
-        print(" [*] Waiting for messages. To exit press CTRL+C")
-        await asyncio.Future()        
+    queue = await channel.declare_queue("queue.dlq", durable=True)
+    app.state.rabbit_queue_dlq = queue
 
-async def on_consumerDQLQueue(message: AbstractIncomingMessage) -> None:
+    # Binding the queue to the exchange
+    await queue.bind(exchange, routing_key='queue.dlq')
+
+async def consumeDLQ(app: FastAPI):
+    await app.state.rabbit_queue_dlq.consume(on_consumerDQLQueue)           
+
+async def on_consumerDQLQueue(message: IncomingMessage) -> None:
     async with message.process():
         request = message.body.decode()
         json_request = json.loads(request)

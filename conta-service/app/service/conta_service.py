@@ -1,11 +1,17 @@
 from fastapi import APIRouter, HTTPException
 from aredis_om import get_redis_connection, JsonModel, Field, Migrator
 from redis_om import NotFoundError
+from app.config import HOST_REDIS, PORT_REDIS, logger
+from opentelemetry.instrumentation.redis import RedisInstrumentor
+
 
 
 router = APIRouter()
 
-redis = get_redis_connection(host="localhost", port=6379, decode_responses=True, db=0)
+# Instrument redis
+RedisInstrumentor().instrument()
+
+redis = get_redis_connection(host=HOST_REDIS, port=PORT_REDIS, decode_responses=True, db=0)
 
 class Conta(JsonModel):
     idConta: int = Field(index=True)
@@ -27,10 +33,13 @@ async def get_contas():
 async def get_conta_by_id(id: int):
     await Migrator().run()
     try:
+        logger.info("Inicio consulta Saldo - conta")
         conta = await Conta.find(Conta.idConta == id).first()
+        logger.info("Término consulta Saldo - conta")
         return { "SaldoConta": conta.saldoConta, 
                   "ValorAtivos": conta.valorAtivos } 
     except NotFoundError as ex:
+        logger.error("Problema na consulta por ID")
         return "Bad request", 400 
 
 @router.get("/pk/{pk}")

@@ -1,11 +1,14 @@
 import enum
-from aredis_om import get_redis_connection, JsonModel, Migrator
+from aredis_om import get_redis_connection, JsonModel, Migrator, Field
 from datetime import datetime
 from fastapi import APIRouter
+from app.config import HOST_REDIS, PORT_REDIS
+
+
 
 router = APIRouter()
 
-redis = get_redis_connection(host="localhost", port=6379, decode_responses=True)
+redis = get_redis_connection(host=HOST_REDIS, port=PORT_REDIS, decode_responses=True)
 
 class Ativo(str, enum.Enum):
     VIBRANIUM = "VIBRANIUM"
@@ -29,11 +32,11 @@ class Evento(str, enum.Enum):
     ERRO = "ERRO"
 
 class Orquestrador(JsonModel):
-    date: datetime
-    uuid: str
+    date: datetime = Field(index=True)
+    uuid: str = Field(index=True)
     entrada: str
-    evento: Evento
-    status: Status
+    evento: Evento = Field(index=True)
+    status: Status = Field(index=True)
 
     class Meta:
         database = redis
@@ -54,4 +57,5 @@ async def save_event(evento: Orquestrador):
 
 @router.get("/")    
 async def get_event(uuid: str):
+    await Migrator().run()
     return await Orquestrador.find(Orquestrador.uuid == uuid).all()

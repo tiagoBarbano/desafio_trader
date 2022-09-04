@@ -1,4 +1,5 @@
 import asyncio
+from cgitb import Hook
 from typing import Any
 from fastapi import FastAPI
 from app.service import createOrder, findOrderToOrder
@@ -12,6 +13,8 @@ from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.aio_pika import AioPikaInstrumentor
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
+from starlette_prometheus import metrics, PrometheusMiddleware
+from app.config import PORT_JAEGER, HOST_JAEGER
 
 
 def create_app():
@@ -30,7 +33,7 @@ def create_app():
     tracer = TracerProvider(resource=resource)
     trace.set_tracer_provider(tracer)
     
-    tracer.add_span_processor(BatchSpanProcessor(JaegerExporter(agent_host_name="localhost",agent_port=6831,)))
+    tracer.add_span_processor(BatchSpanProcessor(JaegerExporter(agent_host_name="jaeger-all-in-one",agent_port=6831, )))
     
     def server_request_hook(span: Span, scope: dict):
         if span and span.is_recording():
@@ -53,11 +56,19 @@ def create_app():
     RedisInstrumentor().instrument()
     AioPikaInstrumentor().instrument()
     
+    app.add_middleware(PrometheusMiddleware)    
+    
     @app.on_event("startup")
     async def start_create():
-        task1 = asyncio.create_task(createOrder.createOrder())
-        task2 = asyncio.create_task(findOrderToOrder.findOrderToOrder())
-        await asyncio.gather(task1,task2)
+        await createOrder.createOrder(app)
+        await findOrderToOrder.findOrderToOrder(app)
+        
+        asyncio.create_task(createOrder.consumeCreateOrder(app))
+        asyncio.create_task(findOrderToOrder.consumefindOrderToOrder(app))
+
+        print('Listening on queue default')
+    
+    app.add_route("/metrics", metrics)
         
     return app
 

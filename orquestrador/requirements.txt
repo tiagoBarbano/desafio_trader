@@ -1,7 +1,7 @@
 uvicorn[standard]==0.15.0
 fastapi==0.68.1
 pydantic!=1.8
-aio_pika==8.1.1
+aio_pika==7.2.0
 redis_om==0.0.27
 asyncio==3.4.3
 opentelemetry-sdk==1.12.0rc2
@@ -10,4 +10,5 @@ opentelemetry-instrumentation-fastapi==0.32b0
 opentelemetry-sdk==1.12.0rc2
 opentelemetry-instrumentation-redis==0.32b0
 opentelemetry-exporter-otlp-proto-grpc==1.12.0rc2
-opentelemetry-instrumentation-aio-pika==0.32b0s
+opentelemetry-instrumentation-aio-pika==0.32b0
+starlette_prometheus

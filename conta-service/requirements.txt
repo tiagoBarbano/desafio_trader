@@ -10,4 +10,4 @@ opentelemetry-instrumentation-fastapi==0.32b0
 opentelemetry-sdk==1.12.0rc2
 opentelemetry-instrumentation-redis==0.32b0
 opentelemetry-exporter-otlp-proto-grpc==1.12.0rc2
-opentelemetry-instrumentation-aio-pika==0.32b0s
+starlette_prometheus

@@ -1,9 +1,10 @@
 from aredis_om import get_redis_connection, JsonModel, Field
 import enum
 from datetime import datetime
+from app.config import HOST_REDIS, PORT_REDIS
 
 
-redis = get_redis_connection(host="localhost", port=6379, decode_responses=True)
+redis = get_redis_connection(host=HOST_REDIS, port=PORT_REDIS, decode_responses=True)
 
 class Ativo(str, enum.Enum):
     VIBRANIUM = "VIBRANIUM"

@@ -1,80 +1,32 @@
 version: "3.9"
 services:
-  jaeger-all-in-one:
-    image: jaegertracing/all-in-one
-    environment:
-      - JAEGER_DISABLED=false
-    ports:
-      - 16686:16686
-      - 6831:6831/udp
-      - 14268
-      - 14250
-
-  # Zipkin
-  # zipkin-all-in-one:
-  #   image: openzipkin/zipkin:latest
-  #   ports:
-  #     - "9411:9411"
-  # # Collector
-  
-  # otel-collector:
-  #   image: otel/opentelemetry-collector:latest
-  #   command: ["--config=/etc/otel-collector-config.yml", "${OTELCOL_ARGS}"]
-  #   volumes:
-  #     - ./otel-collector-config.yml:/etc/otel-collector-config.yml
-  #   ports:
-  #     - "1888:1888"   # pprof extension
-  #     - "8888:8888"   # Prometheus metrics exposed by the collector
-  #     - "8889:8889"   # Prometheus exporter metrics
-  #     - "13133:13133" # health_check extension
-  #     - "4317:4317"   # OTLP gRPC receiver
-  #     # - "55679:55679" # zpages extension
-  #     - "9411"   # Zipkin receiver
-  #     - "55679" # zpages extension
-  #   depends_on:
-  #     - jaeger-all-in-one
-  #     - zipkin-all-in-one
-
-  # prometheus:
-  #   container_name: prometheus
-  #   image: prom/prometheus:latest
-  #   volumes:
-  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
-  #   ports:
-  #     - "9090:9090"
-
-  redis:
-    image: redislabs/redismod
-    ports:
-    - 6379:6379
+  orquestrador:
+    build: ../orquestrador/
     volumes:
-      - redis_data:/data/redis
-    restart: always
-
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: redis-ui
-    environment:
-      - REDIS_HOSTS=local:redis:6379
-      - HTTP_USER=admin
-      - HTTP_PASSWORD=admin
+      - .:/usr/app
     ports:
-      - 8081:8081
-    depends_on:
-      - redis  
-
-  rabbit-mq:
-    image: rabbitmq:3.8.14-management
-    ports:
-      - 5672:5672
-      - 15672:15672
-    environment:
-      METRICS_PROMETHEUS: "true"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:15672"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      - 8001:8001
+    environment: 
+      - HOST_REDIS=redis
+      - PORT_REDIS=6379
+      - URL_RABBIT_MQ=amqp://guest:guest@rabbit-mq/
+      - HOST_JAEGER=jaeger-all-in-one
+      - PORT_JAEGER=6831
+      - PROXY_CONTA=http://conta-service:8003/
+      - JAEGER_SAMPLER_MANAGER_HOST_PORT=jaeger-all-in-one:5778
+      - JAEGER_AGENT_HOST=jaeger
+      - JAEGER_AGENT_PORT=jaeger-all-in-one
+    depends_on: 
+      - redis
+      - rabbit-mq
+      - jaeger-all-in-one
+    networks:
+      - trader-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
     restart: always
     deploy:
       mode: replicated
@@ -92,21 +44,199 @@ services:
         max_attempts: 3
         window: 60s 
 
+  ordem-service:
+    build: ../ordem-service/
+    volumes:
+      - .:/usr/app
+    ports:
+      - 8000:8000
+    environment: 
+      - HOST_REDIS=redis
+      - PORT_REDIS=6379
+      - URL_RABBIT_MQ=amqp://guest:guest@rabbit-mq/
+      - HOST_JAEGER=jaeger-all-in-one
+      - PORT_JAEGER=6831
+      - PROXY_CONTA=http://conta-service:8003/
+    depends_on: 
+      - redis
+      - rabbit-mq
+      - conta-service
+      - jaeger-all-in-one      
+    networks:
+      - trader-network
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 800M
+        reservations:
+          cpus: '0.25'
+          memory: 800M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s 
+  init-service:
+    build: ../init-ordem/
+    volumes:
+      - .:/usr/app
+    ports:
+      - 8002:8002
+    environment: 
+      - HOST_REDIS=redis
+      - PORT_REDIS=6379
+      - URL_RABBIT_MQ=amqp://guest:guest@rabbit-mq/
+      - HOST_JAEGER=jaeger-all-in-one
+      - PORT_JAEGER=6831
+    depends_on: 
+      - redis
+      - rabbit-mq
+      - jaeger-all-in-one      
+    networks:
+      - trader-network
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+      endpoint_mode: dnsrr
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 800M
+        reservations:
+          cpus: '0.25'
+          memory: 800M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s 
+  conta-service:
+    build: ../conta-service/
+    volumes:
+      - .:/usr/app
+    ports:
+      - 8003:8003
+    environment: 
+      - HOST_REDIS=redis
+      - PORT_REDIS=6379
+      - URL_RABBIT_MQ=amqp://guest:guest@rabbit-mq/
+      - HOST_JAEGER=jaeger-all-in-one
+      - PORT_JAEGER=6831
+    depends_on: 
+      - redis
+      - rabbit-mq
+      - jaeger-all-in-one      
+    networks:
+      - trader-network
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 800M
+        reservations:
+          cpus: '0.25'
+          memory: 800M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s 
+  jaeger-all-in-one:
+    image: jaegertracing/all-in-one
+    ports:
+      - 16686:16686
+      - 6831:6831/udp
+      - 14268
+      - 14250
+      - 5775:5775/udp
+      - 6832:6832/udp
+      - 5778:5778
+      - 14268:14268
+      - 9411:9411     
+    networks:
+      - trader-network
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - trader-network
+
+  redis:
+    image: redislabs/redismod
+    ports:
+    - 6379:6379
+    volumes:
+      - redis_data:/data/redis
+    restart: always
+    networks:
+      - trader-network
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-ui
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin
+    ports:
+      - 8081:8081
+    depends_on:
+      - redis
+    networks:
+      - trader-network  
+
+  rabbit-mq:
+    image: rabbitmq:3.8.14-management
+    ports:
+      - 5672:5672
+      - 15672:15672
+      - 15692:15692
+    networks:
+      - trader-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:15672"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+
+  grafana:
+    image: grafana/grafana
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../grafana/provisioning/:/etc/grafana/provisioning/
+    env_file:
+      - ../grafana/config.monitoring
+    networks:
+      - trader-network
+    restart: always
+
 volumes:
-  redis_data:              
+  redis_data: {}      
+  grafana_data: {}
 
-#  postgres:
-#    container_name: postgres_container
-#    image: postgres
-#    environment:
-#      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-#      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-#      PGDATA: /data/postgres
-#    volumes:
-#       - postgres:/data/postgres
-#    ports:
-#      - "5432:5432"
-#    restart: unless-stopped
-
-#volumes:
-#    postgres:    
+networks:
+  trader-network:
+    external: false
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16 

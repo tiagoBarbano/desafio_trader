@@ -5,11 +5,11 @@ from opentelemetry import trace
 from opentelemetry.exporter.jaeger.thrift import JaegerExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor, Span
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.aio_pika import AioPikaInstrumentor
+from starlette_prometheus import metrics, PrometheusMiddleware
+#from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from app.config import HOST_JAEGER, PORT_JAEGER
 
 
 def create_app():
@@ -28,7 +28,7 @@ def create_app():
     tracer = TracerProvider(resource=resource)
     trace.set_tracer_provider(tracer)
     
-    tracer.add_span_processor(BatchSpanProcessor(JaegerExporter(agent_host_name="localhost",agent_port=6831,)))
+    tracer.add_span_processor(BatchSpanProcessor(JaegerExporter(agent_host_name="jaeger-all-in-one",agent_port=6831,)))
         
     def server_request_hook(span: Span, scope: dict):
         if span and span.is_recording():
@@ -47,10 +47,8 @@ def create_app():
                                        client_request_hook=client_request_hook, 
                                        client_response_hook=client_response_hook)  
 
-    # Instrument redis
-    RedisInstrumentor().instrument()
-    AioPikaInstrumentor().instrument()
-    
+    app.add_middleware(PrometheusMiddleware)
+    app.add_route("/metrics", metrics)
     app.include_router(conta_service.router)
         
     return app

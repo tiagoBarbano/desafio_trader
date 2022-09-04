@@ -1,9 +1,10 @@
 from redis_om import get_redis_connection, JsonModel
 import enum
+from app.config import HOST_REDIS, PORT_REDIS
 
 
 # This should be a different database
-redis = get_redis_connection(host="localhost", port=6379, decode_responses=True)
+redis = get_redis_connection(host=HOST_REDIS, port=PORT_REDIS, decode_responses=True)
 
 class Transacao(str, enum.Enum):
     COMPRA = "COMPRA"
