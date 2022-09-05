@@ -28,7 +28,8 @@ def create_app():
     tracer = TracerProvider(resource=resource)
     trace.set_tracer_provider(tracer)
     
-    tracer.add_span_processor(BatchSpanProcessor(JaegerExporter(agent_host_name="jaeger-all-in-one",agent_port=6831,)))
+    tracer.add_span_processor(BatchSpanProcessor(JaegerExporter(agent_host_name=HOST_JAEGER,
+                                                                agent_port=PORT_JAEGER,)))
         
     def server_request_hook(span: Span, scope: dict):
         if span and span.is_recording():

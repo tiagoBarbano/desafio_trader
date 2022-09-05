@@ -49,7 +49,7 @@ async def on_message(message: IncomingMessage) -> None:
                 
             resposta = await contaProxy(newOrder.idConta)
             
-            if resposta == 1:
+            if resposta == -1:
                 raise Exception("Problema na Validacao da conta")
             
             match newOrder.tipoTransacao:
@@ -65,13 +65,13 @@ async def on_message(message: IncomingMessage) -> None:
                 raise Exception(str(ex))
             
             try: 
-                await post_message(newOrder, None, "queue.created_order", "queue.created_order")
+                await post_message(newOrder, "Ordem Criada com Sucesso", "queue.created_order", "queue.created_order")
             except Exception as ex:
-                await post_message_dlq(newOrder, None, "queue.dlq", "queue.dlq")
+                await post_message_dlq(newOrder, str(ex), "queue.dlq", "queue.dlq")
                 await newOrder.delete()
                 raise Exception(str(ex))
     except Exception as ex:
-        await post_message_dlq(newOrder, ex, "queue.dlq", "queue.dlq")
+        await post_message_dlq(newOrder, str(ex), "queue.dlq", "queue.dlq")
         raise Exception(str(ex))
     
     

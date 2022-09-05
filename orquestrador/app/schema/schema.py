@@ -37,6 +37,7 @@ class Orquestrador(JsonModel):
     entrada: str
     evento: Evento = Field(index=True)
     status: Status = Field(index=True)
+    desc_status: str | None
 
     class Meta:
         database = redis
@@ -49,7 +50,14 @@ class Order(JsonModel):
     idConta: int
     
     class Meta:
-        database = redis        
+        database = redis
+
+class Transation(JsonModel):
+    orderFind : Order
+    orderMatch: Order
+    
+    class Meta:
+        database = redis         
         
 async def save_event(evento: Orquestrador):
     await Migrator().run()

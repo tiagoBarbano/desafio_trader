@@ -66,11 +66,11 @@ async def on_findOrderToOrder(message: IncomingMessage) -> None:
                 msg = Transation(orderFind=OrderInput,
                                  orderMatch=OrderMatch[0])
                                               
-                await post_message(msg, None, "queue.created_booking", "queue.created_booking")
+                await post_message(msg, "Ordens prontas para processo de booking", "queue.created_booking", "queue.created_booking")
             else:
-                await post_message(OrderInput, None, "queue.pending.booking", "queue.pending_booking")    
+                await post_message(OrderInput, "Ordem ainda pendente", "queue.pending_booking", "queue.pending_booking")    
     except Exception as ex:
-        await post_message_dlq(OrderInput, None, "queue.dlq", "queue.dlq")
+        await post_message_dlq(OrderInput, str(ex), "queue.dlq", "queue.dlq")
         OrderMatch[0].statusOrdem = Status.PENDENTE
         OrderInput.statusOrdem = Status.PENDENTE
         await OrderMatch[0].save()

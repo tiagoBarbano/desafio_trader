@@ -5,7 +5,6 @@ from app.config import HOST_REDIS, PORT_REDIS, logger
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 
 
-
 router = APIRouter()
 
 # Instrument redis

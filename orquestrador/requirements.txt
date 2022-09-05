@@ -7,8 +7,11 @@ asyncio==3.4.3
 opentelemetry-sdk==1.12.0rc2
 opentelemetry-exporter-jaeger-thrift==1.12.0rc2
 opentelemetry-instrumentation-fastapi==0.32b0
-opentelemetry-sdk==1.12.0rc2
+opentelemetry-api==1.12.0rc2
 opentelemetry-instrumentation-redis==0.32b0
 opentelemetry-exporter-otlp-proto-grpc==1.12.0rc2
 opentelemetry-instrumentation-aio-pika==0.32b0
 starlette_prometheus
+opentelemetry-opentracing-shim
+redis
+redis_opentracing

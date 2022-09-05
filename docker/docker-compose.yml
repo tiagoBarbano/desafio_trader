@@ -16,17 +16,13 @@ services:
       - JAEGER_SAMPLER_MANAGER_HOST_PORT=jaeger-all-in-one:5778
       - JAEGER_AGENT_HOST=jaeger
       - JAEGER_AGENT_PORT=jaeger-all-in-one
+      - JAEGER_SAMPLER_TYPE=const
     depends_on: 
       - redis
       - rabbit-mq
       - jaeger-all-in-one
     networks:
       - trader-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "200k"
-        max-file: "10"
     restart: always
     deploy:
       mode: replicated
@@ -57,6 +53,7 @@ services:
       - HOST_JAEGER=jaeger-all-in-one
       - PORT_JAEGER=6831
       - PROXY_CONTA=http://conta-service:8003/
+      - JAEGER_SAMPLER_TYPE=const      
     depends_on: 
       - redis
       - rabbit-mq
@@ -66,6 +63,8 @@ services:
       - trader-network
     restart: always
     deploy:
+      labels:
+        - '--tracing.jaeger.traceContextHeaderName=uber-trace-id'
       mode: replicated
       replicas: 1
       resources:
@@ -92,6 +91,7 @@ services:
       - URL_RABBIT_MQ=amqp://guest:guest@rabbit-mq/
       - HOST_JAEGER=jaeger-all-in-one
       - PORT_JAEGER=6831
+      - JAEGER_SAMPLER_TYPE=const
     depends_on: 
       - redis
       - rabbit-mq
@@ -99,7 +99,7 @@ services:
     networks:
       - trader-network
     restart: always
-    deploy:
+    deploy:          
       mode: replicated
       replicas: 1
       endpoint_mode: dnsrr
@@ -127,6 +127,7 @@ services:
       - URL_RABBIT_MQ=amqp://guest:guest@rabbit-mq/
       - HOST_JAEGER=jaeger-all-in-one
       - PORT_JAEGER=6831
+      - JAEGER_SAMPLER_TYPE=const
     depends_on: 
       - redis
       - rabbit-mq
@@ -134,7 +135,7 @@ services:
     networks:
       - trader-network
     restart: always
-    deploy:
+    deploy:    
       mode: replicated
       replicas: 1
       resources:
@@ -160,7 +161,15 @@ services:
       - 6832:6832/udp
       - 5778:5778
       - 14268:14268
-      - 9411:9411     
+      - 9411:9411
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.http.services.jaeger.loadbalancer.server.port=16686
+        - traefik.http.routers.jaeger.rule=Host(`jaeger.wshihadeh.cloud`)
+        - traefik.http.routers.jaeger.service=jaeger
+        - traefik.http.routers.jaeger.entrypoints=web
+        - traefik.docker.network=trader-network      
     networks:
       - trader-network
 
@@ -228,6 +237,58 @@ services:
     networks:
       - trader-network
     restart: always
+
+  proxy:
+    image: traefik:v2.8
+    command: 
+      - '--api.insecure=true' 
+      - '--providers.docker'
+      - '--log.level=DEBUG'
+      - '--tracing.serviceName=traefik'
+      - '--tracing.spanNameLimit=250'
+      - '--tracing.jaeger=true'
+      - '--tracing.jaeger.samplingServerURL=http://jaeger-all-in-one:5778/sampling'
+      - '--tracing.jaeger.samplingType=const'
+      - '--tracing.jaeger.samplingParam=1'
+      - '--tracing.jaeger.localAgentHostPort=127.0.0.1:6831'
+      - '--tracing.jaeger.gen128Bit=true'
+      - '--tracing.jaeger.propagation=jaeger'
+      - '--tracing.jaeger.traceContextHeaderName=traefik-trace-id'
+      - '--tracing.jaeger.collector.endpoint=http://jaeger-all-in-one:14268/api/traces?format=jaeger.thrift'
+      - '--metrics.prometheus={}'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - '80:80'
+      - '8080:8080'
+    deploy:
+      # labels:
+      #   - traefik.enable=true
+      #   - traefik.docker.network=trader-network
+      #   # Dashboard Router
+      #   - traefik.http.services.traefik-dashboard.loadbalancer.server.port=8080
+      #   - traefik.http.routers.traefik-dashboard.rule=Host(`dashboard.wshihadeh.cloud`)
+      #   - traefik.http.routers.traefik-dashboard.service=traefik-dashboard
+      #   - traefik.http.routers.traefik-dashboard.entrypoints=web
+      restart_policy:
+        #condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        delay: 10s
+        order: start-first
+        parallelism: 1
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+    logging:
+      driver: json-file
+      options:
+        'max-size': '10m'
+        'max-file': '5'
+    networks:
+      - trader-network
 
 volumes:
   redis_data: {}      

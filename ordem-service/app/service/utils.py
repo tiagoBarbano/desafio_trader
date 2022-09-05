@@ -27,7 +27,7 @@ async def post_message(msg, dsc: str, queue_name: str, routing_key: str):
            
         print(msg)
     except Exception as ex:
-        await post_message_dlq(msg.json(), "queue.dlq", "queue.dlq")
+        await post_message_dlq(msg.json(), str(ex),"queue.dlq", "queue.dlq")
         await delete_order_dlq(msg.json())
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ex))
     
@@ -38,10 +38,10 @@ async def post_message_dlq(msg, dsc: str, queue_name: str, routing_key: str):
             uuid = msg.myUUID
         else:
             uuid = msg.pk        
+ 
+ 
         exchange = "desafio"
 
-        exchange = "desafio"
-    
         connection: RobustConnection = await connect_robust(RABBIT_MQ)
         channel = await connection.channel()
         exchange = await channel.declare_exchange(exchange, ExchangeType.TOPIC,  )

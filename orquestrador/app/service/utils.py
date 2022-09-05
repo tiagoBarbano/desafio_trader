@@ -53,11 +53,13 @@ async def on_consumerDQLQueue(message: IncomingMessage) -> None:
         request = message.body.decode()
         json_request = json.loads(request)
         headers = str(message.headers.get("UUID"))
+        desc = str(message.headers.get("Exception"))        
         
         evento = Orquestrador(date = datetime.now(),
                             uuid = headers,
                             entrada = str(json_request),
                             evento = Evento.ERRO,
-                            status = Status.CANCELADA)
+                            status = Status.CANCELADA,
+                            desc_status = desc)
                 
         await save_event(evento)
