@@ -5,6 +5,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.aio_pika import AioPikaInstrumentor
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from starlette_prometheus import metrics, PrometheusMiddleware
@@ -30,14 +31,18 @@ def create_app():
           )
        
     resource = Resource.create(attributes={"service.name": "Orquestrador"})
+    
+    # trace.set_tracer_provider(TracerProvider(resource=resource))
+    # tracer = trace.get_tracer(__name__)
+    
+    # otlp_exporter = OTLPSpanExporter(endpoint="otel-collector:4317", insecure=True)
+    # span_processor = BatchSpanProcessor(otlp_exporter)
+    
+    # trace.get_tracer_provider().add_span_processor(span_processor)
+    
     tracer = TracerProvider(resource=resource)
     trace.set_tracer_provider(tracer)
-    
     tracer.add_span_processor(BatchSpanProcessor(JaegerExporter(agent_host_name=HOST_JAEGER,agent_port=PORT_JAEGER,)))
-
-    RedisInstrumentor().instrument() 
-    AioPikaInstrumentor().instrument()
-    FastAPIInstrumentor().instrument_app(app)
 
     app.add_middleware(PrometheusMiddleware)
 
@@ -55,9 +60,14 @@ def create_app():
         asyncio.create_task(consumeCreatedBooking(app))
         
         print('Listening on queue default')
-    
+
+    app.add_event_handler("startup", start_create)
+        
     app.add_route("/metrics", metrics)
     app.include_router(schema.router)    
-    app.add_event_handler("startup", start_create)
+
+    FastAPIInstrumentor().instrument_app(app, tracer_provider=tracer)
+    AioPikaInstrumentor().instrument(tracer_provider=tracer)
+    RedisInstrumentor().instrument(tracer_provider=tracer) 
 
     return app

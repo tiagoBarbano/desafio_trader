@@ -1,11 +1,14 @@
-import asyncio, json
+import json
 from aredis_om import Migrator
 from aio_pika import connect_robust, IncomingMessage, ExchangeType
-from app.schema.order_schema import Order, Status, Transacao
+from app.schema.order_schema import Order, Status, Transacao, OrderSchema
 from app.service.utils import post_message, post_message_dlq
 from app.schema.transacao_schema import Transation
 from app.config import RABBIT_MQ
 from fastapi import FastAPI
+from app.repository import get_order_to_booking, save, saveModel
+from app.service.contaProxy import contaProxyCredita, contaProxyDebita
+from app.service.utils import montaOrder
 
 
 async def findOrderToOrder(app: FastAPI):
@@ -35,44 +38,85 @@ async def on_findOrderToOrder(message: IncomingMessage) -> None:
         async with message.process():
             json_request = json.loads(message.body.decode())
             
-            OrderInput = Order(myUUID = json_request["myUUID"],
-                            tipoTransacao = json_request["tipoTransacao"],
-                            precoMedio = json_request["precoMedio"],
-                            qtdOrdem = json_request["qtdOrdem"],
-                            idConta = json_request["idConta"],
-                            dataOrdem = json_request["dataOrdem"],
-                            nomeAtivo = json_request["nomeAtivo"],
-                            statusOrdem = json_request["statusOrdem"],
-                            valorOrdem = json_request["valorOrdem"])
-            
+            OrderInput = OrderSchema(myUUID = json_request["myUUID"],
+                                tipoTransacao = json_request["tipoTransacao"],
+                                precoMedio = json_request["precoMedio"],
+                                qtdOrdem = json_request["qtdOrdem"],
+                                idConta = json_request["idConta"],
+                                dataOrdem = json_request["dataOrdem"],
+                                nomeAtivo = json_request["nomeAtivo"],
+                                statusOrdem = json_request["statusOrdem"],
+                                valorOrdem = json_request["valorOrdem"])
+                
             match OrderInput.tipoTransacao:
                 case Transacao.COMPRA:
-                    OrderMatch = await Order.find(Order.tipoTransacao == Transacao.VENDA,
-                                                Order.statusOrdem == Status.PENDENTE,
-                                                Order.valorOrdem == OrderInput.valorOrdem).all()
+                    OrderMatch = await get_order_to_booking(OrderInput.idConta, 
+                                                            Transacao.VENDA, 
+                                                            Status.PENDENTE, 
+                                                            OrderInput.valorOrdem)
+                    
+                    if OrderMatch != []:
+                        credita = contaProxyCredita(OrderMatch[0].idConta,
+                                                    OrderMatch[0].qtdOrdem,
+                                                    OrderMatch[0].valorOrdem,
+                                                    OrderMatch[0].nomeAtivo)
+                        
+                        debita = contaProxyDebita(OrderInput.idConta,
+                                                    OrderInput.qtdOrdem,
+                                                    OrderInput.valorOrdem,
+                                                    OrderInput.nomeAtivo)
+                        
+                        if credita == True and debita == True:
+                            msg = Transation(orderFind=OrderInput,
+                                            orderMatch=OrderMatch[0])
+                                                
+                            await post_message(msg, "Ordens processadas - booking", "queue.created_booking", "queue.created_booking")
+                        else:
+                            raise Exception("Problema para gerar o booking")
+                    else:
+                        await post_message(OrderInput, "Ordem ainda pendente", "queue.pending_booking", "queue.pending_booking")    
+                    
                 case Transacao.VENDA:
-                    OrderMatch = await Order.find(Order.tipoTransacao == Transacao.COMPRA,
-                                                Order.statusOrdem == Status.PENDENTE,
-                                                Order.valorOrdem == OrderInput.valorOrdem).all()
+                    OrderMatch = await get_order_to_booking(OrderInput.idConta, 
+                                                            Transacao.COMPRA, 
+                                                            Status.PENDENTE, 
+                                                            OrderInput.valorOrdem)
+                    
+                    if OrderMatch != []:
+                        credita = await contaProxyCredita(OrderInput.idConta,
+                                                    OrderInput.qtdOrdem,
+                                                    OrderInput.valorOrdem,
+                                                    OrderInput.nomeAtivo)
+                        
+                        debita = await contaProxyDebita(OrderMatch[0].idconta,
+                                                    OrderMatch[0].qtdordem,
+                                                    OrderMatch[0].valorordem,
+                                                    OrderMatch[0].nomeativo)
+                        
+                        if credita == True and debita == True:
+                            OrderMatchMQ = montaOrder(OrderMatch[0])
+
+                            OrderInput.statusOrdem = Status.EFETIVADA
+                            
+                            await save(OrderInput)
+                            await save(OrderMatchMQ)
+                            
+                            msg = Transation(orderFind=OrderInput,
+                                            orderMatch=OrderMatchMQ)
+                                                
+                            await post_message(msg, "Ordens processadas - booking", "queue.created_booking", "queue.created_booking")
+                        else:
+                            raise Exception("Problema para gerar o booking")
+                    else:
+                        await post_message(OrderInput, "Ordem ainda pendente", "queue.pending_booking", "queue.pending_booking")                        
                 case _:
                     raise Exception("Transacao não identificada")
-                
-            if OrderMatch != []:
-                OrderMatch[0].statusOrdem = Status.PROCESSANDO
-                OrderInput.statusOrdem = Status.PROCESSANDO
-                await OrderMatch[0].save()
-                await OrderInput.save()
-                
-                msg = Transation(orderFind=OrderInput,
-                                 orderMatch=OrderMatch[0])
-                                              
-                await post_message(msg, "Ordens prontas para processo de booking", "queue.created_booking", "queue.created_booking")
-            else:
-                await post_message(OrderInput, "Ordem ainda pendente", "queue.pending_booking", "queue.pending_booking")    
+
     except Exception as ex:
         await post_message_dlq(OrderInput, str(ex), "queue.dlq", "queue.dlq")
         OrderMatch[0].statusOrdem = Status.PENDENTE
         OrderInput.statusOrdem = Status.PENDENTE
-        await OrderMatch[0].save()
-        await OrderInput.save()
+        await saveModel(OrderMatch[0])
+        await save(OrderInput)
         raise Exception(str(ex))
+    

@@ -11,4 +11,6 @@ opentelemetry-sdk==1.12.0rc2
 opentelemetry-instrumentation-redis==0.32b0
 opentelemetry-exporter-otlp-proto-grpc==1.12.0rc2
 opentelemetry-instrumentation-aio-pika==0.32b0
+opentelemetry-instrumentation-sqlalchemy==0.32b0
 starlette_prometheus
+asyncpg

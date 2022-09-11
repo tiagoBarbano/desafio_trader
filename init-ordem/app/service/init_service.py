@@ -1,17 +1,29 @@
 import uuid
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Response
+from fastapi import APIRouter, HTTPException, status, Response, BackgroundTasks
 from aio_pika import connect_robust, Message, RobustConnection, ExchangeType
-from app.schema.initOrdemSchema import InitOrder
+#from app.schema.initOrdemSchema import InitOrder
+from app.schema.initOrdemSchemaPG import OrderSchema
+from app.model import OrderModel
+from app.repository import saveInitOrder
 from app.config import RABBIT_MQ, logger
 
 
 router = APIRouter()
 
 @router.post('/orders', status_code=status.HTTP_201_CREATED)
-async def create(request: InitOrder, background_tasks: BackgroundTasks, response: Response):
+async def create(request: OrderSchema, background_tasks: BackgroundTasks, response: Response):
     try:
         logger.info("Inicio")
         my_uuid = uuid.uuid4()
+        
+        orderModel = OrderModel(tipotransacao=str(request.tipoTransacao.COMPRA.capitalize()),
+                                precomedio=request.precoMedio,
+                                qtdordem=request.qtdOrdem,
+                                idconta=request.idConta,
+                                myuuid=str(my_uuid))
+    
+        #background_tasks.add_task(saveInitOrder, orderModel)
+                
         queue_name = "queue.new_order"
         routing_key = "queue.new_order"
         exchange = "desafio"
@@ -30,14 +42,10 @@ async def create(request: InitOrder, background_tasks: BackgroundTasks, response
             ),
             routing_key
         )
-            
-        background_tasks.add_task(saveRequest, request)
+
         logger.info("Término")            
         response.headers["UUID"] = str(my_uuid)
-        return request
+        return { "message": "Ordem Criada", "uuid": str(my_uuid), "request": str(request)}
     except Exception as ex:
         logger.error("Erro: " + str(ex))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ex))
-
-def saveRequest(request: InitOrder):
-    request.save()

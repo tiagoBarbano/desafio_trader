@@ -1,14 +1,14 @@
-import asyncio, json
-from fastapi import HTTPException, status
+import json
 from aredis_om import Migrator
 from aio_pika import connect_robust, IncomingMessage, ExchangeType
 from datetime import datetime
-from app.schema.order_schema import Order, Ativo, Status, Transacao
+from app.schema.order_schema import Order, Ativo, Status, Transacao, OrderSchema
 from app.service.utils import post_message, post_message_dlq
 from app.service.contaProxy import contaProxy
 from app.config import RABBIT_MQ
 from fastapi import FastAPI
-
+from app.repository import get_order_pendings, save
+from app.service.utils import montaOrder
 
 async def createOrder(app: FastAPI):
     await Migrator().run()
@@ -37,15 +37,15 @@ async def on_message(message: IncomingMessage) -> None:
         async with message.process():
             json_request = json.loads(message.body.decode())
             
-            newOrder = Order(myUUID = json_request["myUUID"],
-                            tipoTransacao = json_request["tipoTransacao"],
-                            precoMedio = json_request["precoMedio"],
-                            qtdOrdem = json_request["qtdOrdem"],
-                            idConta = json_request["idConta"],
-                            dataOrdem = datetime.now(),
-                            nomeAtivo = Ativo.VIBRANIUM,
-                            statusOrdem = Status.PENDENTE,
-                            valorOrdem = json_request["precoMedio"] * json_request["qtdOrdem"])
+            newOrder = OrderSchema(myUUID = json_request["myUUID"],
+                                    tipoTransacao = json_request["tipoTransacao"],
+                                    precoMedio = json_request["precoMedio"],
+                                    qtdOrdem = json_request["qtdOrdem"],
+                                    idConta = json_request["idConta"],
+                                    dataOrdem = datetime.now(),
+                                    nomeAtivo = Ativo.VIBRANIUM,
+                                    statusOrdem = Status.PENDENTE,
+                                    valorOrdem = json_request["precoMedio"] * json_request["qtdOrdem"])
                 
             resposta = await contaProxy(newOrder.idConta)
             
@@ -59,13 +59,9 @@ async def on_message(message: IncomingMessage) -> None:
                     await validaSaldoVenda(resposta, newOrder)
 
             try: 
-                await newOrder.save()
-            except Exception as ex:
-                await post_message_dlq(newOrder, str(ex), "queue.dlq", "queue.dlq")
-                raise Exception(str(ex))
-            
-            try: 
-                await post_message(newOrder, "Ordem Criada com Sucesso", "queue.created_order", "queue.created_order")
+                ordem = await save(newOrder)
+                novaOrdem = montaOrder(ordem)
+                await post_message(novaOrdem, "Ordem Criada com Sucesso", "queue.created_order", "queue.created_order")
             except Exception as ex:
                 await post_message_dlq(newOrder, str(ex), "queue.dlq", "queue.dlq")
                 await newOrder.delete()
@@ -77,14 +73,12 @@ async def on_message(message: IncomingMessage) -> None:
     
 async def validaSaldoCompra(resposta, newOrder):
     try:
-        orderPendings = await Order.find(Order.idConta == newOrder.idConta,
-                                Order.tipoTransacao == Transacao.COMPRA,
-                                Order.statusOrdem == Status.PENDENTE).all()
+        orderPendings = await get_order_pendings(newOrder.idConta, Transacao.COMPRA, Status.PENDENTE)
         
         saldoComprometido = 0
         
         for ordersPending in orderPendings:
-            saldoComprometido = ordersPending.valorOrdem + saldoComprometido
+            saldoComprometido = ordersPending.valorordem + saldoComprometido
         
         saldoReal = resposta.get("SaldoConta") - (saldoComprometido + newOrder.valorOrdem)
         
@@ -100,14 +94,12 @@ async def validaSaldoCompra(resposta, newOrder):
     
 async def validaSaldoVenda(resposta, newOrder):
     try:
-        orderPendings = await Order.find(Order.idConta == newOrder.idConta,
-                                    Order.tipoTransacao == Transacao.VENDA,
-                                    Order.statusOrdem == Status.PENDENTE).all()
+        orderPendings = await get_order_pendings(newOrder.idConta, Transacao.VENDA, Status.PENDENTE)
         
         saldoComprometido = 0
         
         for ordersPending in orderPendings:
-            saldoComprometido = ordersPending.valorOrdem + saldoComprometido
+            saldoComprometido = ordersPending.valorordem + saldoComprometido
         
         saldoReal = resposta.get("ValorAtivos") - (newOrder.valorOrdem - saldoComprometido)
         

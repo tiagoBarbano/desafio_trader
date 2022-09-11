@@ -3,12 +3,14 @@ from aredis_om import get_redis_connection, JsonModel, Migrator, Field
 from datetime import datetime
 from fastapi import APIRouter
 from app.config import HOST_REDIS, PORT_REDIS
-
+from opentelemetry.instrumentation.redis import RedisInstrumentor
 
 
 router = APIRouter()
 
 redis = get_redis_connection(host=HOST_REDIS, port=PORT_REDIS, decode_responses=True)
+
+RedisInstrumentor().instrument()
 
 class Ativo(str, enum.Enum):
     VIBRANIUM = "VIBRANIUM"
@@ -43,7 +45,8 @@ class Orquestrador(JsonModel):
         database = redis
 
 class Order(JsonModel):
-    myUUID = str
+    id: int | None
+    myUUID: str
     tipoTransacao: Transacao
     precoMedio: float
     qtdOrdem: int

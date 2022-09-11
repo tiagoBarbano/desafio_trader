@@ -1,7 +1,8 @@
 from fastapi import HTTPException, status
 from aio_pika import connect_robust, RobustConnection, ExchangeType, Message
-from app.schema.order_schema import Order
+from app.schema.order_schema import Order, OrderSchema, Status
 from app.config import RABBIT_MQ
+from app.model import OrdenModel
 
 
 async def post_message(msg, dsc: str, queue_name: str, routing_key: str):
@@ -68,3 +69,17 @@ async def delete_order(request: str):
 
 async def save_event(request: Order):
     request.save        
+
+async def montaOrder(ordem: OrdenModel):
+    newOrder = OrderSchema(id=ordem.id,
+                            myUUID=ordem.myuuid,
+                            tipoTransacao=ordem.tipotransacao,
+                            precoMedio=ordem.precomedio,
+                            qtdOrdem=ordem.qtdordem,
+                            idConta=ordem.idconta,
+                            dataOrdem=ordem.dataordem,
+                            nomeAtivo=ordem.nomeativo,
+                            statusOrdem=ordem.statusordem,
+                            valorOrdem=ordem.valorordem)
+    return newOrder                            
+                            

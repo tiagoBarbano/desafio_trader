@@ -34,27 +34,22 @@ async def on_newOrderQueue(message: IncomingMessage) -> None:
         request = message.body.decode()
         json_request = json.loads(request)
         headers = str(message.headers.get("UUID"))
-        
+
         newOrder = Order(myUUID = headers,
+                        id = json_request["id"],
                         tipoTransacao = json_request["tipoTransacao"],
                         precoMedio = json_request["precoMedio"],
                         qtdOrdem = json_request["qtdOrdem"],
                         idConta = json_request["idConta"])
-    
+        
+        evento = Orquestrador(date = datetime.now(),
+                uuid = headers,
+                entrada = str(newOrder),
+                evento = Evento.CRIACAO,
+                status = Status.PENDENTE)
+            
+        await evento.save()
+        logger.info(" [*] Termino SaveEvent")       
+        
         await post_message(newOrder, "queue.to_create_order", "queue.to_create_order")
         logger.info(" [*] Termino newOrderQueue.")
-            
-        evento = Orquestrador(date = datetime.now(),
-                            uuid = headers,
-                            entrada = str(newOrder),
-                            evento = Evento.CRIACAO,
-                            status = Status.PENDENTE)
-        
-        await save_event(evento)
-        logger.info(" [*] Termino SaveEvent")
-
-        
-        
-    
-        
-

@@ -19,3 +19,8 @@ scrape_configs:
     scrape_interval: 60s
     static_configs:
       - targets: ['rabbit-mq:15692'] 
+  # - job_name: 'otel-collector'
+  #   scrape_interval: 10s
+  #   static_configs:
+  #     - targets: ['otel-collector:8889']
+  #     - targets: ['otel-collector:8888']      

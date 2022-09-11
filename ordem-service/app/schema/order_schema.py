@@ -1,7 +1,9 @@
 from aredis_om import get_redis_connection, JsonModel, Field
 import enum
-from datetime import datetime
+from datetime import datetime, date
 from app.config import HOST_REDIS, PORT_REDIS
+from pydantic import BaseModel
+
 
 
 redis = get_redis_connection(host=HOST_REDIS, port=PORT_REDIS, decode_responses=True)
@@ -32,3 +34,19 @@ class Order(JsonModel):
     
     class Meta:
         database = redis
+        
+class OrderSchema(BaseModel):
+    id: int | None
+    myUUID : str
+    tipoTransacao: Transacao
+    precoMedio: float
+    qtdOrdem: int
+    idConta: int
+    dataOrdem: date
+    nomeAtivo: Ativo
+    statusOrdem: Status
+    valorOrdem: float
+    
+    class Config:
+        orm_mode = True
+   

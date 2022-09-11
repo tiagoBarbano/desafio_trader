@@ -37,6 +37,7 @@ async def on_createdOrderQueue(message: IncomingMessage) -> None:
         evento = str(message.headers.get("evento"))
                 
         createdOrder = Order(myUUID = json_request["myUUID"],
+                        id = json_request["id"],
                         tipoTransacao = json_request["tipoTransacao"],
                         precoMedio = json_request["precoMedio"],
                         qtdOrdem = json_request["qtdOrdem"],
